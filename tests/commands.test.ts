@@ -140,6 +140,33 @@ describe("complete named command routing", () => {
     await expectRequest(["files", "delete", "f1"], "/files/f1", { method: "DELETE" });
   });
 
+  it("falls back to preview when Desktop returns an empty download for a non-empty file", async () => {
+    const cwd = tempDir();
+    raw
+      .mockResolvedValueOnce({
+        status: 200,
+        contentType: "application/octet-stream",
+        body: new Uint8Array(),
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        contentType: "image/png",
+        body: Uint8Array.from([7, 8, 9]),
+      });
+    request.mockResolvedValueOnce({ success: true, file: { id: "f1", size: 3 } });
+
+    const downloaded = await executeCommand(["files", "download", "f1", "--output", "out.bin"], {
+      client,
+      cwd,
+    });
+
+    expect(raw).toHaveBeenNthCalledWith(1, "/files/f1/download");
+    expect(request).toHaveBeenCalledWith("/files/f1");
+    expect(raw).toHaveBeenNthCalledWith(2, "/files/f1/preview");
+    expect(fs.readFileSync(path.join(cwd, "out.bin"))).toEqual(Buffer.from([7, 8, 9]));
+    expect(downloaded.value).toMatchObject({ success: true, bytes: 3 });
+  });
+
   it("routes note relations", async () => {
     await expectRequest(["relations", "list", "n1"], "/notes/n1/relations");
     await expectRequest(

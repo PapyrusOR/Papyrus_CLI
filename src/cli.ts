@@ -372,7 +372,13 @@ async function executeFiles(
   }
   if (action === "preview" || action === "download" || action === "thumbnail") {
     const id = required(args[0], `files ${action} 需要文件 ID`);
-    const raw = await client.requestRaw(`/files/${encode(id)}/${action}`);
+    let raw = await client.requestRaw(`/files/${encode(id)}/${action}`);
+    if (action === "download" && raw.body.byteLength === 0) {
+      const metadata = await client.request<{ file?: { size?: number } }>(`/files/${encode(id)}`);
+      if ((metadata.file?.size ?? 0) > 0) {
+        raw = await client.requestRaw(`/files/${encode(id)}/preview`);
+      }
+    }
     const output = parsed.values.get("output");
     if (output) fs.writeFileSync(path.resolve(cwd, output), raw.body);
     return {
