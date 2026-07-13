@@ -11,11 +11,20 @@ export default {
       "ts-jest",
       {
         useESM: true,
+        tsconfig: "<rootDir>/tsconfig.test.json",
       },
     ],
   },
-  testMatch: ["**/*.test.ts"],
-  collectCoverageFrom: ["src/**/*.ts", "!src/**/*.d.ts"],
+  testMatch: ["<rootDir>/tests/**/*.test.ts"],
+  collectCoverageFrom: ["src/api.ts", "src/cli.ts", "src/config.ts"],
+  coverageThreshold: {
+    global: {
+      branches: 70,
+      functions: 50,
+      lines: 75,
+      statements: 75,
+    },
+  },
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov", "html"],
 };

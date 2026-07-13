@@ -1,11 +1,8 @@
-/**
- * Papyrus CLI - Library Exports
- *
- * This file exports the API client and types for programmatic use.
- */
-
-// API Client
 export {
+  PapyrusApiError,
+  PapyrusClient,
+  createPapyrusClient,
+  normalizeApiBase,
   healthCheck,
   isApiAvailable,
   listCards,
@@ -14,6 +11,7 @@ export {
   updateCard,
   deleteCard,
   importCards,
+  getNextDue,
   getReviewQueue,
   getReviewStats,
   submitReview,
@@ -23,8 +21,8 @@ export {
   createBackup,
 } from "./api.js";
 
-// Configuration
 export {
+  getConfigPath,
   loadConfig,
   saveConfig,
   getConfig,
@@ -35,41 +33,34 @@ export {
   displayConfig,
 } from "./config.js";
 
-// Types
+export { executeCommand, formatOutput, runCli } from "./cli.js";
+
 export type {
+  APIError,
+  BackupInfo,
   Card,
-  CreateCardInput,
-  UpdateCardInput,
-  CardsListResponse,
   CardResponse,
+  CardsListResponse,
+  CLIConfig,
+  CliExecutionResult,
+  CreateCardInput,
   DeleteResponse,
+  FileRecord,
+  HealthResponse,
   ImportResponse,
+  JsonObject,
+  JsonPrimitive,
+  JsonValue,
+  Note,
+  RawResponse,
+  RequestOptions,
   ReviewQueueItem,
   ReviewStats,
   ReviewStatsResponse,
   ReviewSubmission,
   ReviewSubmitResponse,
-  HealthResponse,
-  CLIConfig,
-  BackupInfo,
-  SearchResult,
+  RuntimeOverrides,
   SearchResponse,
-  Note,
-  APIError,
+  SearchResult,
+  UpdateCardInput,
 } from "./types.js";
-
-// Utilities
-export {
-  formatDate,
-  formatRelativeTime,
-  truncate,
-  readFileSafe,
-  isReadableFile,
-  parseTags,
-  formatFileSize,
-  isValidCardId,
-  escapeRegex,
-  sleep,
-  prompt,
-  confirm,
-} from "./utils.js";

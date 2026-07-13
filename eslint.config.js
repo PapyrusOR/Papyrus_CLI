@@ -1,18 +1,24 @@
-import js from '@eslint/js';
-import tsParser from '@typescript-eslint/parser';
-import tsPlugin from '@typescript-eslint/eslint-plugin';
-import globals from 'globals';
+import js from "@eslint/js";
+import tsParser from "@typescript-eslint/parser";
+import tsPlugin from "@typescript-eslint/eslint-plugin";
+import globals from "globals";
 
 export default [
   js.configs.recommended,
   {
-    files: ['src/**/*.ts'],
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    files: ["src/**/*.ts", "tests/**/*.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-        project: './tsconfig.json',
+        ecmaVersion: "latest",
+        sourceType: "module",
+        project: "./tsconfig.test.json",
       },
       globals: {
         ...globals.node,
@@ -20,26 +26,27 @@ export default [
       },
     },
     plugins: {
-      '@typescript-eslint': tsPlugin,
+      "@typescript-eslint": tsPlugin,
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-argument': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-      '@typescript-eslint/restrict-template-expressions': 'off',
-      '@typescript-eslint/no-floating-promises': 'off',
-      '@typescript-eslint/require-await': 'off',
-      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
-      '@typescript-eslint/prefer-nullish-coalescing': 'warn',
-      'no-console': 'off',
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "@typescript-eslint/explicit-function-return-type": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/restrict-template-expressions": "off",
+      "@typescript-eslint/no-floating-promises": "off",
+      "@typescript-eslint/require-await": "off",
+      "@typescript-eslint/no-unnecessary-type-assertion": "off",
+      "@typescript-eslint/prefer-nullish-coalescing": "warn",
+      "no-undef": "off",
+      "no-console": "off",
     },
   },
   {
-    ignores: ['dist/', 'node_modules/', '*.js', '**/*.test.ts'],
+    ignores: ["dist/", "coverage/", "node_modules/", "*.js"],
   },
 ];
