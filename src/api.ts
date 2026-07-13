@@ -1,78 +1,161 @@
-/**
- * Papyrus CLI - API Client
- */
-
-import axios, { AxiosError, type AxiosInstance } from "axios";
-import { getApiUrl } from "./config.js";
+import { loadConfig } from "./config.js";
 import type {
+  APIError,
   Card,
   CardResponse,
   CardsListResponse,
+  CLIConfig,
   CreateCardInput,
-  DeleteResponse,
   HealthResponse,
   ImportResponse,
+  RawResponse,
+  RequestOptions,
   ReviewStatsResponse,
-  ReviewSubmitResponse,
   SearchResponse,
   UpdateCardInput,
 } from "./types.js";
 
-/**
- * Create configured Axios instance
- */
-function createClient(): AxiosInstance {
-  return axios.create({
-    baseURL: getApiUrl(),
-    timeout: 30000,
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+export function normalizeApiBase(rawBase: string): string {
+  const trimmed = rawBase.trim().replace(/\/+$/, "");
+  return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
 }
 
-/**
- * Handle API errors
- */
-function handleError(error: unknown): never {
-  if (error instanceof AxiosError) {
-    const message = error.response?.data?.detail || error.response?.data?.message || error.message;
-    const status = error.response?.status;
+function normalizeRelativePath(path: string): string {
+  const prefixed = path.startsWith("/") ? path : `/${path}`;
+  return prefixed.startsWith("/api/") ? prefixed.slice(4) : prefixed;
+}
 
-    if (status === 404) {
-      throw new Error(`Not found: ${message}`);
-    } else if (status === 400) {
-      throw new Error(`Bad request: ${message}`);
-    } else if (status === 500) {
-      throw new Error(`Server error: ${message}`);
-    } else if (error.code === "ECONNREFUSED") {
-      throw new Error(
-        "Cannot connect to Papyrus API. " + "Make sure the server is running with: papyrus serve"
-      );
+function errorMessage(payload: unknown, status: number): { message: string; errorId?: string } {
+  if (typeof payload === "object" && payload !== null) {
+    const error = payload as APIError;
+    return {
+      message: error.error ?? error.detail ?? error.message ?? `HTTP ${status}`,
+      errorId: error.errorId,
+    };
+  }
+  return { message: typeof payload === "string" && payload ? payload : `HTTP ${status}` };
+}
+
+export class PapyrusApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly errorId?: string,
+    readonly payload?: unknown
+  ) {
+    super(message);
+    this.name = "PapyrusApiError";
+  }
+}
+
+export class PapyrusClient {
+  readonly apiBase: string;
+  readonly mcpBase: string;
+  private readonly authToken?: string;
+  private readonly timeoutMs: number;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(config: CLIConfig, fetchImpl: typeof fetch = fetch) {
+    this.apiBase = normalizeApiBase(config.apiUrl);
+    this.mcpBase = config.mcpUrl.replace(/\/+$/, "");
+    this.authToken = config.authToken;
+    this.timeoutMs = config.timeoutMs;
+    this.fetchImpl = fetchImpl;
+  }
+
+  private headers(options: RequestOptions): Record<string, string> {
+    const headers: Record<string, string> = { Accept: "application/json", ...options.headers };
+    if (this.authToken) {
+      headers["X-Papyrus-Token"] = this.authToken;
     }
-
-    throw new Error(`API error: ${message}`);
+    if (options.body !== undefined && headers["Content-Type"] === undefined) {
+      headers["Content-Type"] = "application/json";
+    }
+    return headers;
   }
 
-  throw error;
+  private async fetchResponse(path: string, options: RequestOptions = {}): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const externalAbort = (): void => controller.abort();
+    options.signal?.addEventListener("abort", externalAbort, { once: true });
+    try {
+      return await this.fetchImpl(`${this.apiBase}${normalizeRelativePath(path)}`, {
+        method: options.method ?? "GET",
+        headers: this.headers(options),
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`Papyrus API 请求超时或已取消（${this.timeoutMs}ms）`);
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`无法连接 Papyrus Desktop API ${this.apiBase}: ${message}`);
+    } finally {
+      clearTimeout(timeout);
+      options.signal?.removeEventListener("abort", externalAbort);
+    }
+  }
+
+  async request<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+    const response = await this.fetchResponse(path, options);
+    const text = await response.text();
+    let payload: unknown = {};
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = text;
+      }
+    }
+    if (!response.ok) {
+      const details = errorMessage(payload, response.status);
+      throw new PapyrusApiError(details.message, response.status, details.errorId, payload);
+    }
+    return payload as T;
+  }
+
+  async requestRaw(path: string, options: RequestOptions = {}): Promise<RawResponse> {
+    const response = await this.fetchResponse(path, {
+      ...options,
+      headers: { Accept: "*/*", ...options.headers },
+    });
+    const body = new Uint8Array(await response.arrayBuffer());
+    if (!response.ok) {
+      const text = new TextDecoder().decode(body);
+      let payload: unknown = text;
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        // Keep the response text when it is not JSON.
+      }
+      const details = errorMessage(payload, response.status);
+      throw new PapyrusApiError(details.message, response.status, details.errorId, payload);
+    }
+    return {
+      status: response.status,
+      contentType: response.headers.get("content-type") ?? "application/octet-stream",
+      body,
+    };
+  }
+
+  async callMcpTool(tool: string, params: Record<string, unknown> = {}): Promise<unknown> {
+    return await this.request("/mcp/call", {
+      method: "POST",
+      body: { tool, params },
+    });
+  }
 }
 
-/**
- * Health check
- */
+export function createPapyrusClient(config = loadConfig()): PapyrusClient {
+  return new PapyrusClient(config);
+}
+
 export async function healthCheck(): Promise<HealthResponse> {
-  const client = createClient();
-  try {
-    const response = await client.get<HealthResponse>("/api/health");
-    return response.data;
-  } catch (error) {
-    return handleError(error);
-  }
+  return await createPapyrusClient().request<HealthResponse>("/health");
 }
 
-/**
- * Check if API is available
- */
 export async function isApiAvailable(): Promise<boolean> {
   try {
     await healthCheck();
@@ -82,261 +165,106 @@ export async function isApiAvailable(): Promise<boolean> {
   }
 }
 
-// ==================== Card APIs ====================
-
-/**
- * List all cards
- */
 export async function listCards(): Promise<Card[]> {
-  const client = createClient();
-  try {
-    const response = await client.get<CardsListResponse>("/api/cards");
-    return response.data.cards;
-  } catch (error) {
-    return handleError(error);
-  }
+  return (await createPapyrusClient().request<CardsListResponse>("/cards")).cards;
 }
 
-/**
- * Get a single card by ID
- */
 export async function getCard(id: string): Promise<Card> {
-  const client = createClient();
-  try {
-    const cards = await listCards();
-    const card = cards.find((c) => c.id === id);
-    if (!card) {
-      throw new Error(`Card not found: ${id}`);
-    }
-    return card;
-  } catch (error) {
-    return handleError(error);
-  }
+  return (await createPapyrusClient().request<CardResponse>(`/cards/${encodeURIComponent(id)}`))
+    .card;
 }
 
-/**
- * Create a new card
- */
 export async function createCard(input: CreateCardInput): Promise<Card> {
-  const client = createClient();
-  try {
-    const response = await client.post<CardResponse>("/api/cards", input);
-    return response.data.card;
-  } catch (error) {
-    return handleError(error);
-  }
+  return (
+    await createPapyrusClient().request<CardResponse>("/cards", { method: "POST", body: input })
+  ).card;
 }
 
-/**
- * Update a card
- */
 export async function updateCard(id: string, input: UpdateCardInput): Promise<Card> {
-  const client = createClient();
-  try {
-    const response = await client.patch<CardResponse>(`/api/cards/${id}`, input);
-    return response.data.card;
-  } catch (error) {
-    return handleError(error);
-  }
+  return (
+    await createPapyrusClient().request<CardResponse>(`/cards/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: input,
+    })
+  ).card;
 }
 
-/**
- * Delete a card
- */
 export async function deleteCard(id: string): Promise<void> {
-  const client = createClient();
-  try {
-    await client.delete<DeleteResponse>(`/api/cards/${id}`);
-  } catch (error) {
-    return handleError(error);
-  }
+  await createPapyrusClient().request(`/cards/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-/**
- * Import cards from text
- */
 export async function importCards(content: string): Promise<number> {
-  const client = createClient();
-  try {
-    const response = await client.post<ImportResponse>("/api/cards/import/txt", {
-      content,
-    });
-    return response.data.count;
-  } catch (error) {
-    return handleError(error);
-  }
+  return (
+    await createPapyrusClient().request<ImportResponse>("/cards/import/txt", {
+      method: "POST",
+      body: { content },
+    })
+  ).count;
 }
 
-// ==================== Review APIs ====================
-
-/**
- * Get next due card (single card review mode)
- */
 export async function getNextDue(): Promise<{
   card: Card | null;
   dueCount: number;
   totalCount: number;
 }> {
-  const client = createClient();
-  try {
-    const response = await client.get<{
-      success: boolean;
-      card: Card | null;
-      due_count: number;
-      total_count: number;
-    }>("/api/review/next");
-    return {
-      card: response.data.card,
-      dueCount: response.data.due_count,
-      totalCount: response.data.total_count,
-    };
-  } catch (error) {
-    return handleError(error);
-  }
+  const response = await createPapyrusClient().request<{
+    card: Card | null;
+    due_count: number;
+    total_count: number;
+  }>("/review/next");
+  return { card: response.card, dueCount: response.due_count, totalCount: response.total_count };
 }
 
-/**
- * Get review queue (all due cards)
- */
 export async function getReviewQueue(): Promise<Card[]> {
-  // Get all cards and filter for due ones
   const cards = await listCards();
   const now = Date.now() / 1000;
-  return cards.filter((c) => c.next_review <= now);
+  return cards.filter((card) => card.next_review <= now);
 }
 
-/**
- * Get review stats
- */
 export async function getReviewStats(): Promise<ReviewStatsResponse> {
-  const cards = await listCards();
-  const now = Date.now() / 1000;
-  const dueCards = cards.filter((c) => c.next_review <= now);
-
-  return {
-    success: true,
-    stats: {
-      total_cards: cards.length,
-      due_today: dueCards.length,
-      new_cards: cards.filter((c) => c.repetitions === 0).length,
-      review_cards: dueCards.filter((c) => c.repetitions > 0).length,
-    },
-  };
+  return (await createPapyrusClient().callMcpTool("get_review_stats")) as ReviewStatsResponse;
 }
 
-/**
- * Submit review
- */
 export async function submitReview(cardId: string, grade: number): Promise<void> {
-  const client = createClient();
-  try {
-    await client.post(`/api/review/${cardId}/rate`, { grade });
-  } catch (error) {
-    return handleError(error);
-  }
+  await createPapyrusClient().request(`/review/${encodeURIComponent(cardId)}/rate`, {
+    method: "POST",
+    body: { grade },
+  });
 }
 
-// ==================== Search APIs ====================
-
-/**
- * Search result item from API
- */
-interface SearchResultItem {
-  id: string;
-  type: "note" | "card";
-  title: string;
-  preview: string;
-  folder: string;
-  tags: string[];
-  matched_field: string;
-  updated_at?: number;
-}
-
-/**
- * Search API response
- */
-interface SearchAPIResponse {
-  success: boolean;
-  query: string;
-  results: SearchResultItem[];
-  total: number;
-  notes_count: number;
-  cards_count: number;
-}
-
-/**
- * Search cards
- */
 export async function searchCards(query: string): Promise<SearchResponse> {
-  const client = createClient();
-  try {
-    const response = await client.get<SearchAPIResponse>("/api/search", {
-      params: { query },
-    });
-
-    // Map API response to CLI format
-    const cardResults = response.data.results
-      .filter((r) => r.type === "card")
-      .map((r) => ({
-        card: {
-          id: r.id,
-          q: r.title,
-          a: r.preview,
-          next_review: 0,
-          interval: 0,
-          ef: 2.5,
-          repetitions: 0,
-          tags: r.tags,
-        } as Card,
-        score: 1.0,
-      }));
-
-    return {
-      success: true,
-      results: cardResults,
-      count: cardResults.length,
-    };
-  } catch (error) {
-    return handleError(error);
-  }
+  const response = await createPapyrusClient().request<{
+    results: Array<{ id: string; type: string; title: string; preview: string; tags: string[] }>;
+  }>(`/search?query=${encodeURIComponent(query)}`);
+  const results = response.results
+    .filter((result) => result.type === "card")
+    .map((result) => ({
+      card: {
+        id: result.id,
+        q: result.title,
+        a: result.preview,
+        next_review: 0,
+        interval: 0,
+        ef: 2.5,
+        repetitions: 0,
+        tags: result.tags,
+      },
+      score: 1,
+    }));
+  return { success: true, results, count: results.length };
 }
 
-// ==================== Data APIs ====================
-
-/**
- * Export data
- */
 export async function exportData(): Promise<unknown> {
-  const client = createClient();
-  try {
-    const response = await client.get<unknown>("/api/data/export");
-    return response.data;
-  } catch (error) {
-    return handleError(error);
-  }
+  return await createPapyrusClient().request("/export");
 }
 
-/**
- * Import data
- */
 export async function importData(data: unknown): Promise<void> {
-  const client = createClient();
-  try {
-    await client.post("/api/data/import", data);
-  } catch (error) {
-    return handleError(error);
-  }
+  await createPapyrusClient().request("/import", { method: "POST", body: data });
 }
 
-/**
- * Create backup
- */
 export async function createBackup(): Promise<{ path: string }> {
-  const client = createClient();
-  try {
-    const response = await client.post<{ path: string }>("/api/data/backup");
-    return response.data;
-  } catch (error) {
-    return handleError(error);
-  }
+  return await createPapyrusClient().request<{ path: string }>("/backup", {
+    method: "POST",
+    body: {},
+  });
 }

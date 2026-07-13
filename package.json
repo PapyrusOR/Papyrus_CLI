@@ -1,7 +1,7 @@
 {
-  "name": "@alpacali/papyrus-cli",
-  "version": "1.0.3",
-  "description": "Papyrus CLI - Command line interface for Papyrus SRS learning system",
+  "name": "@papyrus/cli",
+  "version": "2.0.0-beta.12",
+  "description": "Papyrus Desktop TypeScript API and MCP command-line client",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -18,17 +18,18 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\"",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage --runInBand",
+    "test:runtime": "node scripts/runtime-smoke.mjs",
+    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.mjs\"",
+    "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.mjs\" --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.mjs\" package.json tsconfig.json tsconfig.test.json jest.config.js eslint.config.js README.md",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.mjs\" package.json tsconfig.json tsconfig.test.json jest.config.js eslint.config.js README.md",
     "typecheck": "tsc --noEmit",
     "quality": "npm run typecheck && npm run lint && npm run format:check && npm run test",
     "prepublishOnly": "npm run quality && npm run build",
-    "clean": "rm -rf dist coverage"
+    "clean": "node -e \"const fs=require('node:fs'); for(const p of ['dist','coverage']) fs.rmSync(p,{recursive:true,force:true})\""
   },
   "keywords": [
     "papyrus",
@@ -39,31 +40,22 @@
     "cli",
     "study"
   ],
-  "author": "Papyrus Team",
+  "author": "PapyrusOR",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Papyrus/Papyrus-cli.git"
+    "url": "https://github.com/PapyrusOR/Papyrus_CLI.git"
   },
   "bugs": {
-    "url": "https://github.com/Papyrus/Papyrus-cli/issues"
+    "url": "https://github.com/PapyrusOR/Papyrus_CLI/issues"
   },
-  "homepage": "https://github.com/Papyrus/Papyrus-cli#readme",
+  "homepage": "https://github.com/PapyrusOR/Papyrus_CLI#readme",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=24.0.0"
   },
-  "dependencies": {
-    "axios": "^1.7.9",
-    "chalk": "^5.4.1",
-    "commander": "^13.1.0",
-    "fs-extra": "^11.3.0",
-    "inquirer": "^12.5.0",
-    "ora": "^8.2.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@jest/globals": "^29.7.0",
-    "@types/fs-extra": "^11.0.4",
-    "@types/inquirer": "^9.0.7",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.14.0",
     "@typescript-eslint/eslint-plugin": "^8.29.0",

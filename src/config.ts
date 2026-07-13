@@ -1,107 +1,101 @@
-/**
- * Papyrus CLI - Configuration Management
- */
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import type { CLIConfig, RuntimeOverrides } from "./types.js";
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
-import type { CLIConfig } from "./types.js";
-
-const CONFIG_DIR = join(homedir(), ".papyrus");
-const CONFIG_FILE = join(CONFIG_DIR, "config.json");
+export interface LoadConfigOptions {
+  env?: NodeJS.ProcessEnv;
+  filePath?: string;
+  overrides?: RuntimeOverrides;
+}
 
 const DEFAULT_CONFIG: CLIConfig = {
-  apiUrl: "http://127.0.0.1:8000",
-  dataDir: join(homedir(), "Documents", "Papyrus"),
+  apiUrl: "http://127.0.0.1:8000/api",
+  mcpUrl: "http://127.0.0.1:9200",
+  timeoutMs: 30_000,
+  dataDir: join(homedir(), "PapyrusData"),
 };
 
-/**
- * Ensure config directory exists
- */
-function ensureConfigDir(): void {
-  if (!existsSync(CONFIG_DIR)) {
-    mkdirSync(CONFIG_DIR, { recursive: true });
-  }
+export function getConfigPath(env: NodeJS.ProcessEnv = process.env): string {
+  return env.PAPYRUS_CLI_CONFIG ?? join(homedir(), ".papyrus", "cli.json");
 }
 
-/**
- * Load CLI configuration
- */
-export function loadConfig(): CLIConfig {
-  ensureConfigDir();
-
-  if (!existsSync(CONFIG_FILE)) {
-    saveConfig(DEFAULT_CONFIG);
-    return { ...DEFAULT_CONFIG };
+function readFileConfig(filePath: string): Partial<CLIConfig> {
+  if (!existsSync(filePath)) {
+    return {};
   }
-
   try {
-    const data = readFileSync(CONFIG_FILE, "utf-8");
-    const config = JSON.parse(data) as CLIConfig;
-    return { ...DEFAULT_CONFIG, ...config };
+    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as unknown;
+    return typeof parsed === "object" && parsed !== null ? (parsed as Partial<CLIConfig>) : {};
   } catch {
-    return { ...DEFAULT_CONFIG };
+    return {};
   }
 }
 
-/**
- * Save CLI configuration
- */
-export function saveConfig(config: CLIConfig): void {
-  ensureConfigDir();
-  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8");
+function readTimeout(value: string | undefined, fallback: number): number {
+  if (value === undefined) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-/**
- * Get configuration value
- */
+export function loadConfig(options: LoadConfigOptions = {}): CLIConfig {
+  const env = options.env ?? process.env;
+  const filePath = options.filePath ?? getConfigPath(env);
+  const file = readFileConfig(filePath);
+  const timeoutMs =
+    options.overrides?.timeoutMs ??
+    readTimeout(env.PAPYRUS_TIMEOUT_MS, file.timeoutMs ?? DEFAULT_CONFIG.timeoutMs);
+
+  return {
+    ...DEFAULT_CONFIG,
+    ...file,
+    apiUrl:
+      options.overrides?.apiUrl ?? env.PAPYRUS_API_URL ?? file.apiUrl ?? DEFAULT_CONFIG.apiUrl,
+    mcpUrl:
+      options.overrides?.mcpUrl ?? env.PAPYRUS_MCP_URL ?? file.mcpUrl ?? DEFAULT_CONFIG.mcpUrl,
+    authToken: options.overrides?.authToken ?? env.PAPYRUS_AUTH_TOKEN ?? file.authToken,
+    timeoutMs,
+    dataDir: env.PAPYRUS_DATA_DIR ?? file.dataDir ?? DEFAULT_CONFIG.dataDir,
+  };
+}
+
+export function saveConfig(config: CLIConfig, filePath = getConfigPath()): void {
+  mkdirSync(dirname(filePath), { recursive: true });
+  const persisted = { ...config };
+  delete persisted.authToken;
+  writeFileSync(filePath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
+}
+
 export function getConfig<K extends keyof CLIConfig>(key: K): CLIConfig[K] {
-  const config = loadConfig();
-  return config[key];
+  return loadConfig()[key];
 }
 
-/**
- * Set configuration value
- */
 export function setConfig<K extends keyof CLIConfig>(key: K, value: CLIConfig[K]): void {
+  if (key === "authToken") {
+    throw new Error("authToken 只能通过 PAPYRUS_AUTH_TOKEN 或 --token 提供，不会写入磁盘");
+  }
   const config = loadConfig();
   config[key] = value;
   saveConfig(config);
 }
 
-/**
- * Reset configuration to defaults
- */
-export function resetConfig(): void {
-  saveConfig(DEFAULT_CONFIG);
+export function resetConfig(filePath = getConfigPath()): void {
+  saveConfig({ ...DEFAULT_CONFIG }, filePath);
 }
 
-/**
- * Get data directory path
- */
 export function getDataDir(): string {
-  const config = loadConfig();
-  if (!existsSync(config.dataDir)) {
-    mkdirSync(config.dataDir, { recursive: true });
-  }
-  return config.dataDir;
+  return loadConfig().dataDir;
 }
 
-/**
- * Get API URL
- */
 export function getApiUrl(): string {
-  const config = loadConfig();
-  return config.apiUrl;
+  return loadConfig().apiUrl;
 }
 
-/**
- * Display current configuration
- */
 export function displayConfig(): void {
   const config = loadConfig();
-  console.log("Current Configuration:");
-  console.log(`  API URL: ${config.apiUrl}`);
-  console.log(`  Data Directory: ${config.dataDir}`);
-  console.log(`  Config File: ${CONFIG_FILE}`);
+  console.log(
+    JSON.stringify({ ...config, authToken: config.authToken ? "***" : undefined }, null, 2)
+  );
 }

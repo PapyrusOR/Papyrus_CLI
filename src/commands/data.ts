@@ -44,7 +44,7 @@ export async function backupCommand(options: { output?: string }): Promise<void>
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupName = options.output || `papyrus-backup-${timestamp}.db.bak`;
+    const backupName = options.output ?? `papyrus-backup-${timestamp}.db.bak`;
     const backupPath = resolve(backupName);
 
     // Ensure backup directory exists

@@ -1,8 +1,7 @@
-/**
- * Papyrus CLI - Type Definitions
- */
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+export type JsonObject = Record<string, unknown>;
 
-/** Card data structure */
 export interface Card {
   id: string;
   q: string;
@@ -14,51 +13,71 @@ export interface Card {
   tags: string[];
 }
 
-/** Card creation input */
+export interface Note {
+  id: string;
+  title: string;
+  folder: string;
+  content: string;
+  preview: string;
+  tags: string[];
+  created_at: number;
+  updated_at: number;
+  word_count: number;
+  hash: string;
+  headings: Array<{ level: number; text: string }>;
+  outgoing_links: string[];
+  incoming_count: number;
+}
+
+export interface FileRecord {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  mime_type: string;
+  parent_id: string | null;
+  file_storage_path: string | null;
+  is_folder: number;
+  created_at: number;
+  updated_at: number;
+}
+
 export interface CreateCardInput {
   q: string;
   a: string;
   tags?: string[];
 }
 
-/** Card update input */
 export interface UpdateCardInput {
   q?: string;
   a?: string;
   tags?: string[];
 }
 
-/** API response for card list */
 export interface CardsListResponse {
   success: boolean;
   cards: Card[];
   count: number;
 }
 
-/** API response for single card */
 export interface CardResponse {
   success: boolean;
   card: Card;
 }
 
-/** API response for delete operation */
 export interface DeleteResponse {
   success: boolean;
 }
 
-/** API response for import operation */
 export interface ImportResponse {
   success: boolean;
   count: number;
 }
 
-/** Review queue item */
-export interface ReviewQueueItem {
-  card: Card;
-  index: number;
+export interface HealthResponse {
+  status: string;
 }
 
-/** Review stats */
 export interface ReviewStats {
   total_cards: number;
   due_today: number;
@@ -66,67 +85,79 @@ export interface ReviewStats {
   review_cards: number;
 }
 
-/** API response for review stats */
 export interface ReviewStatsResponse {
   success: boolean;
   stats: ReviewStats;
 }
 
-/** Review submission */
 export interface ReviewSubmission {
   quality: number;
 }
 
-/** API response for review submit */
 export interface ReviewSubmitResponse {
   success: boolean;
   message: string;
 }
 
-/** Health check response */
-export interface HealthResponse {
-  status: string;
+export interface ReviewQueueItem {
+  card: Card;
+  index: number;
 }
 
-/** CLI Configuration */
-export interface CLIConfig {
-  apiUrl: string;
-  dataDir: string;
-  defaultEditor?: string;
-}
-
-/** Backup info */
-export interface BackupInfo {
-  path: string;
-  size: number;
-  created: Date;
-}
-
-/** Search result */
 export interface SearchResult {
   card: Card;
   score: number;
 }
 
-/** Search response */
 export interface SearchResponse {
   success: boolean;
   results: SearchResult[];
   count: number;
 }
 
-/** Note data */
-export interface Note {
-  id: string;
-  title: string;
-  content: string;
-  created_at: string;
-  updated_at: string;
-  tags: string[];
+export interface BackupInfo {
+  path: string;
+  size: number;
+  created: Date;
 }
 
-/** API Error response */
 export interface APIError {
+  error?: string;
   detail?: string;
   message?: string;
+  errorId?: string;
+}
+
+export interface CLIConfig {
+  apiUrl: string;
+  mcpUrl: string;
+  authToken?: string;
+  timeoutMs: number;
+  dataDir: string;
+  defaultEditor?: string;
+}
+
+export interface RuntimeOverrides {
+  apiUrl?: string;
+  mcpUrl?: string;
+  authToken?: string;
+  timeoutMs?: number;
+}
+
+export interface RequestOptions {
+  method?: string;
+  body?: unknown;
+  headers?: Record<string, string>;
+  signal?: AbortSignal;
+}
+
+export interface RawResponse {
+  status: number;
+  contentType: string;
+  body: Uint8Array;
+}
+
+export interface CliExecutionResult {
+  value: unknown;
+  json: boolean;
 }

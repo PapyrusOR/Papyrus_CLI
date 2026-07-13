@@ -13,7 +13,7 @@ import {
   updateCard,
 } from "../api.js";
 import type { Card } from "../types.js";
-import { formatDate, formatRelativeTime, parseTags, truncate } from "../utils.js";
+import { formatRelativeTime, parseTags, truncate } from "../utils.js";
 
 /**
  * Display card in formatted output
@@ -58,7 +58,7 @@ export async function listCardsCommand(options: {
   }
 
   // Limit if specified
-  const limit = options.limit || filtered.length;
+  const limit = options.limit ?? filtered.length;
   const display = filtered.slice(0, limit);
 
   console.log(`\nFound ${filtered.length} cards (showing ${display.length}):\n`);

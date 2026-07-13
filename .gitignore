@@ -15,6 +15,7 @@ dist/
 
 # Coverage
 coverage/
+.runtime-smoke/
 
 # IDE
 .idea/
