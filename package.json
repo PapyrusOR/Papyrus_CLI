@@ -66,5 +66,11 @@
     "prettier": "^3.5.3",
     "ts-jest": "^29.3.1",
     "typescript": "^5.8.3"
+  },
+  "overrides": {
+    "@babel/core": "7.29.6",
+    "brace-expansion@5": "5.0.6",
+    "js-yaml@3": "3.15.0",
+    "js-yaml@4": "4.2.0"
   }
 }
